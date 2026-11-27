@@ -1,0 +1,489 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><style>body{margin:0}[hidden]{display:none!important}</style></head><body>
+<title>HerdSense Ranger Map</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a night-time ranger console. Live park map on the left, controls + alert log on the right; stacks on phones. */
+:root {
+  --night: #0D171B;      /* page */
+  --panel: #13232A;      /* panels */
+  --line: #24404A;       /* hairlines */
+  --ink: #E4EEE9;        /* text */
+  --muted: #8FA7A2;      /* quiet text */
+  --mint: #3FE0B5;       /* HerdSense accent */
+  --gold: #F2B544;       /* ground vibration / footsteps */
+  --alert: #FF6B4A;      /* alarm */
+  --ok: #7BD389;         /* stopped / safe */
+  --display: "Barlow Condensed", "Arial Narrow", Arial, sans-serif;
+  --body: "Atkinson Hyperlegible", "Segoe UI", Arial, sans-serif;
+  --mono: "JetBrains Mono", Consolas, "Courier New", monospace;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body { background: var(--night); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.45; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--night); }
+.wrap { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 14px 20px; max-width: 1500px; margin: 0 auto; display: grid; gap: 14px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; }
+h1 { font-family: var(--display); font-weight: 700; font-size: 34px; letter-spacing: .5px; margin: 0; text-wrap: balance; }
+h1 span { color: var(--mint); }
+.sub { color: var(--muted); margin: 0; }
+.clock { margin-left: auto; font-family: var(--mono); font-size: 15px; color: var(--gold); font-variant-numeric: tabular-nums; }
+.main { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 14px; align-items: start; }
+.mapbox { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; min-width: 0; }
+canvas { display: block; width: 100%; height: auto; touch-action: manipulation; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 10px 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+.side { display: grid; gap: 12px; min-width: 0; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: grid; gap: 10px; }
+.label { font-family: var(--display); font-weight: 600; font-size: 13px; letter-spacing: 1.4px; text-transform: uppercase; color: var(--muted); }
+.mode { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.mode button { text-align: left; }
+button { font: inherit; font-size: 14px; color: var(--ink); background: #1A3038; border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; cursor: pointer; }
+button:hover { border-color: var(--mint); }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--mint); outline-offset: 2px; }
+button.on { background: #0F3B33; border-color: var(--mint); }
+button b { display: block; font-family: var(--display); font-size: 17px; letter-spacing: .3px; }
+button small { color: var(--muted); font-size: 12px; }
+.row { display: flex; flex-wrap: wrap; gap: 6px; }
+.row button { flex: 1 1 auto; }
+.danger { border-color: #6B2F25; background: #2A1814; }
+.danger:hover { border-color: var(--alert); }
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.stat { background: #0F1D22; border-radius: 9px; padding: 8px 10px; }
+.stat .n { font-family: var(--display); font-weight: 700; font-size: 30px; line-height: 1; font-variant-numeric: tabular-nums; }
+.stat .t { color: var(--muted); font-size: 12px; }
+.n.ok { color: var(--ok); } .n.bad { color: var(--alert); } .n.mint { color: var(--mint); } .n.gold { color: var(--gold); }
+.log { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 300px; overflow-y: auto; }
+.log li { display: grid; grid-template-columns: 46px 1fr; gap: 8px; font-size: 13px; padding: 6px 8px; border-radius: 7px; background: #0F1D22; border-left: 3px solid var(--line); }
+.log li time { font-family: var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.log li.alert { border-left-color: var(--alert); }
+.log li.ok { border-left-color: var(--ok); }
+.log li.info { border-left-color: var(--mint); }
+.log li.false { border-left-color: var(--gold); }
+.toggle { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); cursor: pointer; }
+.toggle input { accent-color: var(--mint); width: 16px; height: 16px; }
+.hint { color: var(--muted); font-size: 13px; margin: 0; }
+@media (max-width: 960px) { .main { grid-template-columns: 1fr; } .clock { margin-left: 0; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Herd<span>Sense</span> Ranger Map</h1>
+    <p class="sub">A night in the park. Hidden posts listen and feel, then radio the rangers.</p>
+    <div class="clock" id="clock">21:00</div>
+  </header>
+
+  <div class="main">
+    <div class="mapbox">
+      <canvas id="map" width="1000" height="680" aria-label="Animated park map with elephants, HerdSense posts, poachers, a drone and a ranger jeep"></canvas>
+      <div class="legend">
+        <span><i style="background:#3FE0B5"></i>Post heard a sound</span>
+        <span><i style="background:#F2B544"></i>Post felt footsteps</span>
+        <span><i style="background:#FF6B4A"></i>Alarm / possible poachers</span>
+        <span><i style="background:#7BD389"></i>Rangers</span>
+      </div>
+    </div>
+
+    <div class="side">
+      <section class="card" aria-labelledby="modeL">
+        <div class="label" id="modeL">How posts decide</div>
+        <div class="mode">
+          <button id="mSimple"><b>Simple</b><small>Any one sense</small></button>
+          <button id="mSmart" class="on"><b>HerdSense</b><small>AI + two senses</small></button>
+        </div>
+        <p class="hint" id="modeHint">An alarm needs human voices or an engine AND two-legged footsteps within 2 minutes.</p>
+      </section>
+
+      <section class="card" aria-labelledby="ctlL">
+        <div class="label" id="ctlL">Run the night</div>
+        <div class="row">
+          <button id="bPause">Pause</button>
+          <button id="bSpeed">Speed 1×</button>
+          <button id="bReset">Restart</button>
+        </div>
+        <div class="row">
+          <button id="bPoach" class="danger">Send poachers</button>
+          <button id="bMonkey">Monkeys</button>
+          <button id="bBranch">Falling branch</button>
+          <button id="bThunder">Thunder</button>
+        </div>
+        <label class="toggle"><input type="checkbox" id="reveal" checked> Show hidden poachers (rangers can't see these)</label>
+        <label class="toggle"><input type="checkbox" id="rings" checked> Show listening range of each post</label>
+      </section>
+
+      <section class="card" aria-labelledby="statL">
+        <div class="label" id="statL">Tonight</div>
+        <div class="stats">
+          <div class="stat"><div class="n ok" id="sStopped">0</div><div class="t">poacher groups stopped</div></div>
+          <div class="stat"><div class="n gold" id="sFalse">0</div><div class="t">false alarms</div></div>
+          <div class="stat"><div class="n mint" id="sWarn">–</div><div class="t">avg minutes from entering to first alarm</div></div>
+          <div class="stat"><div class="n bad" id="sClose">0</div><div class="t">times poachers reached the herd</div></div>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="logL">
+        <div class="label" id="logL">Ranger station log</div>
+        <ul class="log" id="log" aria-live="polite"></ul>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const W = 1000, H = 680;
+  const cv = document.getElementById('map'), ctx = cv.getContext('2d');
+  const C = { grass: '#1B2A21', grass2: '#22352A', border: '#7A6A4C', trail: '#3D3A2C', water: '#1D4A5E', water2: '#27627A', tree: '#2D4A2B', tree2: '#375A33',
+    mint: '#3FE0B5', gold: '#F2B544', alert: '#FF6B4A', ok: '#7BD389', ink: '#E4EEE9', muted: '#8FA7A2', ele: '#9A958C', ele2: '#B8B2A7', poach: '#FF8A6B' };
+
+  // ---------- world ----------
+  const station = { x: 95, y: 600 };
+  const water = { x: 470, y: 380, rx: 115, ry: 66 };
+  const trails = {
+    N: [[905, 30], [820, 130], [700, 215], [600, 300], [520, 340]],
+    E: [[990, 440], [860, 432], [720, 445], [600, 420], [540, 400]],
+    S: [[610, 678], [585, 600], [560, 520], [510, 452]]
+  };
+  const trees = [[180, 160], [300, 110], [430, 170], [760, 330], [880, 260], [930, 560], [760, 600], [380, 560], [240, 380], [650, 120], [140, 300], [330, 640], [820, 510], [520, 600]];
+  const POSTS = [[820, 128, 'P1'], [668, 236, 'P2'], [575, 318, 'P3'], [850, 418, 'P4'], [690, 455, 'P5'], [575, 545, 'P6'], [372, 268, 'P7'], [300, 470, 'P8'], [190, 560, 'P9']]
+    .map(([x, y, id]) => ({ x, y, id, heard: 0, felt: 0, lastHuman: -1e9, lastSteps: -1e9, alarm: 0, cool: 0, route: null }));
+  const HEAR = 105, FEEL = 70, RADIO = 290;
+
+  // radio route: hop to the neighbour that gets closest to the station
+  function d(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+  for (const p of POSTS) {
+    const r = [p]; let cur = p, guard = 0;
+    while (d(cur, station) > RADIO && guard++ < 10) {
+      let best = null;
+      for (const q of POSTS) if (q !== cur && d(q, cur) <= RADIO && d(q, station) < d(cur, station) && (!best || d(q, station) < d(best, station))) best = q;
+      if (!best) break; r.push(best); cur = best;
+    }
+    r.push(station); p.route = r;
+  }
+
+  // ---------- state ----------
+  let S;
+  function fresh() {
+    const herd = [];
+    for (let i = 0; i < 6; i++) herd.push({ x: 360 + i * 32 + Math.random() * 10, y: 285 + (i % 2) * 34 + Math.random() * 10, vx: 0, vy: 0, s: i === 5 ? 0.55 : 0.75 + Math.random() * 0.2, step: Math.random() * 6, flee: 0 });
+    return { t: 0, herd, groups: [], sounds: [], packets: [], zones: [], queue: [], nextPoach: 45, nextNoise: 6,
+      drone: { x: station.x, y: station.y, state: 'idle', target: null, timer: 0, task: null, rot: 0 },
+      jeep: { x: station.x + 30, y: station.y - 10, state: 'idle', target: null },
+      stats: { stopped: 0, falses: 0, warn: [], close: 0 } };
+  }
+  let mode = 'smart', paused = false, speed = 1, reveal = true, rings = true;
+
+  // ---------- log ----------
+  const logEl = document.getElementById('log');
+  function clock(t) { const m = 21 * 60 + Math.floor(t); return String(Math.floor(m / 60) % 24).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); }
+  function log(text, cls) {
+    const li = document.createElement('li'); li.className = cls || 'info';
+    li.innerHTML = '<time>' + clock(S.t) + '</time><span></span>'; li.lastChild.textContent = text;
+    logEl.prepend(li); while (logEl.children.length > 40) logEl.lastChild.remove();
+  }
+
+  // ---------- events ----------
+  function sendPoachers() {
+    const keys = Object.keys(trails), k = keys[Math.floor(Math.random() * keys.length)], path = trails[k].map(p => ({ x: p[0], y: p[1] }));
+    const g = { path, i: 1, x: path[0].x, y: path[0].y, state: 'walk', spotted: false, enterT: S.t, alerted: false, truck: { x: path[0].x, y: path[0].y, on: true }, talk: 0, gate: k, reachedHerd: false };
+    S.groups.push(g);
+    S.sounds.push({ x: g.x, y: g.y, r: 165, kind: 'engine', human: true, until: S.t + 4 });
+  }
+  function noise(kind) {
+    if (kind === 'thunder') { S.sounds.push({ x: W / 2, y: H / 2, r: 2000, kind, human: false, until: S.t + 2 }); log('Thunder over the whole park', 'info'); return; }
+    const tr = trees[Math.floor(Math.random() * trees.length)];
+    S.sounds.push({ x: tr[0], y: tr[1], r: kind === 'monkey' ? 95 : 85, kind, human: false, until: S.t + (kind === 'monkey' ? 3 : 1.2) });
+  }
+
+  // ---------- sim step (dt in sim minutes; 1 real second = 1 sim minute at 1x) ----------
+  function step(dt) {
+    S.t += dt;
+    // auto events
+    if (S.t > S.nextPoach) { sendPoachers(); S.nextPoach = S.t + 45 + Math.random() * 35; }
+    if (S.t > S.nextNoise) { const r = Math.random(); noise(r < 0.5 ? 'monkey' : r < 0.9 ? 'branch' : 'thunder'); S.nextNoise = S.t + 5 + Math.random() * 8; }
+    S.sounds = S.sounds.filter(s => s.until > S.t);
+
+    // herd
+    const hc = centroid(S.herd);
+    for (const e of S.herd) {
+      let ax = (water.x - 30 - e.x) * 0.02 + (hc.x - e.x) * 0.012 + (Math.random() - 0.5) * 18;
+      let ay = (water.y - 70 - e.y) * 0.02 + (hc.y - e.y) * 0.012 + (Math.random() - 0.5) * 18;
+      if (e.flee > 0) { e.flee -= dt; ax += e.fx * 60; ay += e.fy * 60; }
+      for (const o of S.herd) { if (o === e) continue; const dx = e.x - o.x, dy = e.y - o.y, dd = Math.hypot(dx, dy) || 1; if (dd < 48) { ax += dx / dd * (48 - dd) * 1.2; ay += dy / dd * (48 - dd) * 0.8; } }
+      e.vx = (e.vx + ax * dt) * 0.92; e.vy = (e.vy + ay * dt) * 0.92;
+      const sp = Math.hypot(e.vx, e.vy), max = e.flee > 0 ? 45 : 9; if (sp > max) { e.vx *= max / sp; e.vy *= max / sp; }
+      e.x = clamp(e.x + e.vx * dt, 120, 900); e.y = clamp(e.y + e.vy * dt, 120, 600); e.step += dt * (1 + sp * 0.2);
+    }
+
+    // poachers
+    for (const g of S.groups) {
+      let tx, ty, spd = 16;
+      if (g.state === 'walk') {
+        if (g.i < g.path.length) { tx = g.path[g.i].x; ty = g.path[g.i].y; if (Math.hypot(tx - g.x, ty - g.y) < 6) g.i++; }
+        else { const c = centroid(S.herd); tx = c.x; ty = c.y; spd = 12; }
+      } else if (g.state === 'leave') { tx = g.path[0].x; ty = g.path[0].y; spd = 40; if (Math.hypot(tx - g.x, ty - g.y) < 8) { g.state = 'gone'; g.truck.on = false; } }
+      if (g.state !== 'gone' && tx !== undefined) { const a = Math.atan2(ty - g.y, tx - g.x); g.x += Math.cos(a) * spd * dt; g.y += Math.sin(a) * spd * dt; g.dir = Math.cos(a); }
+      g.talk -= dt; if (g.state === 'walk' && g.talk <= 0) { g.talk = 1.5 + Math.random() * 2; S.sounds.push({ x: g.x, y: g.y, r: 70, kind: 'voices', human: true, until: S.t + 1.2, follow: g }); }
+      if (g.state === 'walk' && !g.reachedHerd && Math.hypot(g.x - hc.x, g.y - hc.y) < 70) {
+        g.reachedHerd = true; S.stats.close++; log('Poachers reached the herd. The elephants run.', 'alert');
+        for (const e of S.herd) { const a = Math.atan2(e.y - g.y, e.x - g.x); e.fx = Math.cos(a); e.fy = Math.sin(a); e.flee = 8; }
+      }
+    }
+    for (const s of S.sounds) if (s.follow) { s.x = s.follow.x; s.y = s.follow.y; }
+    S.groups = S.groups.filter(g => g.state !== 'gone');
+
+    // posts sense
+    for (const p of POSTS) {
+      p.heard = Math.max(0, p.heard - dt * 2); p.felt = Math.max(0, p.felt - dt * 2); p.alarm = Math.max(0, p.alarm - dt); p.cool -= dt;
+      let heardHuman = false, heardAny = false, feltHuman = false, feltAny = false;
+      for (const s of S.sounds) if (Math.hypot(s.x - p.x, s.y - p.y) < Math.min(s.r, s.kind === 'thunder' ? 9999 : HEAR + s.r * 0.3)) { heardAny = true; if (s.human) heardHuman = true; }
+      for (const g of S.groups) if (g.state === 'walk' && Math.hypot(g.x - p.x, g.y - p.y) < FEEL) { feltAny = feltHuman = true; }
+      for (const e of S.herd) if (Math.hypot(e.x - p.x, e.y - p.y) < FEEL + 15) feltAny = true;
+      if (heardAny) p.heard = 1; if (feltAny) p.felt = 1;
+      if (heardHuman) p.lastHuman = S.t; if (feltHuman) p.lastSteps = S.t;
+      let fire = false, why = '';
+      if (mode === 'simple') { if (heardAny || feltAny) { fire = true; why = heardAny ? 'heard a sound' : 'felt footsteps'; } }
+      else if (S.t - p.lastHuman < 2 && S.t - p.lastSteps < 2) { fire = true; why = 'heard people AND felt two-legged steps'; }
+      if (fire && p.cool <= 0) {
+        p.cool = 8; p.alarm = 3;
+        const real = S.groups.some(g => g.state === 'walk' && Math.hypot(g.x - p.x, g.y - p.y) < 130);
+        S.packets.push({ route: p.route, seg: 0, f: 0, post: p, why, real });
+        for (const g of S.groups) if (g.state === 'walk' && !g.alerted && Math.hypot(g.x - p.x, g.y - p.y) < 130) { g.alerted = true; S.stats.warn.push(S.t - g.enterT); }
+      }
+    }
+
+    // radio packets
+    for (const k of S.packets) {
+      const a = k.route[k.seg], b = k.route[k.seg + 1], len = Math.hypot(b.x - a.x, b.y - a.y);
+      k.f += (dt * 260) / len;
+      if (k.f >= 1) { k.seg++; k.f = 0; if (k.seg >= k.route.length - 1) { k.done = true; arrive(k); } }
+    }
+    S.packets = S.packets.filter(k => !k.done);
+
+    // zones fade
+    for (const z of S.zones) if (z.status !== 'possible') z.life -= dt;
+    S.zones = S.zones.filter(z => z.life > 0);
+
+    droneStep(dt); jeepStep(dt); stats();
+  }
+
+  function arrive(k) {
+    const p = k.post;
+    let z = S.zones.find(z => z.post === p && z.status === 'possible');
+    if (!z) { z = { x: p.x, y: p.y, post: p, status: 'possible', life: 8, born: S.t }; S.zones.push(z); log('Alarm from ' + p.id + ': ' + k.why + '. Possible poachers.', 'alert'); S.queue.push(z); }
+  }
+
+  function droneStep(dt) {
+    const dr = S.drone; dr.rot += dt * 40;
+    if (dr.state === 'idle' && S.queue.length) { dr.task = S.queue.shift(); dr.state = 'out'; log('Drone flying to ' + dr.task.post.id, 'info'); }
+    if (dr.state === 'out') { if (moveTo(dr, dr.task, 170, dt)) { dr.state = 'scan'; dr.timer = 1.5; } }
+    else if (dr.state === 'scan') {
+      dr.timer -= dt;
+      if (dr.timer <= 0) {
+        const seen = S.groups.filter(g => g.state === 'walk' && Math.hypot(g.x - dr.x, g.y - dr.y) < 190);
+        if (seen.length) {
+          dr.task.status = 'confirmed'; dr.task.life = 6;
+          for (const g of seen) g.spotted = true;
+          for (const z of S.zones) if (z.status === 'possible' && seen.some(g => Math.hypot(g.x - z.x, g.y - z.y) < 260)) { z.status = 'confirmed'; z.life = 6; }
+          S.queue = S.queue.filter(z => z.status === 'possible');
+          log('Drone camera sees people near ' + dr.task.post.id + '. Rangers on the way.', 'alert');
+          if (S.jeep.state === 'idle') { S.jeep.state = 'chase'; S.jeep.target = seen[0]; }
+          dr.state = 'follow'; dr.follow = seen[0]; dr.timer = 0;
+        } else {
+          dr.task.status = 'clear'; dr.task.life = 5; S.stats.falses++;
+          log('Drone finds no people near ' + dr.task.post.id + '. False alarm.', 'false');
+          dr.state = 'back';
+        }
+      }
+    } else if (dr.state === 'follow') {
+      const g = dr.follow;
+      if (!g || g.state !== 'walk') dr.state = 'back'; else moveTo(dr, { x: g.x, y: g.y - 25 }, 120, dt);
+    } else if (dr.state === 'back') { if (moveTo(dr, station, 120, dt)) dr.state = 'idle'; }
+  }
+
+  function jeepStep(dt) {
+    const j = S.jeep;
+    if (j.state === 'idle') {
+      const g = S.groups.find(g => g.spotted && g.state === 'walk'); if (g) { j.state = 'chase'; j.target = g; }
+    }
+    if (j.state === 'chase') {
+      const g = j.target;
+      if (!g || g.state !== 'walk') { j.state = 'back'; return; }
+      if (moveTo(j, g, 70, dt, 18)) {
+        g.state = 'leave'; j.state = 'back'; S.stats.stopped++;
+        log('Rangers stopped the poachers. They are leaving the park.', 'ok');
+      }
+    } else if (j.state === 'back') { if (moveTo(j, { x: station.x + 30, y: station.y - 10 }, 70, dt)) j.state = 'idle'; }
+  }
+
+  function moveTo(o, t, spd, dt, near) {
+    const dx = t.x - o.x, dy = t.y - o.y, dd = Math.hypot(dx, dy), stepLen = spd * dt;
+    if (dx !== 0) o.dir = Math.sign(dx);
+    if (dd <= (near || 0) + stepLen) { if (!near) { o.x = t.x; o.y = t.y; } return true; }
+    o.x += dx / dd * stepLen; o.y += dy / dd * stepLen; return false;
+  }
+  function centroid(a) { let x = 0, y = 0; for (const e of a) { x += e.x; y += e.y; } return { x: x / a.length, y: y / a.length }; }
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+
+  const el = id => document.getElementById(id);
+  let lastStats = '';
+  function stats() {
+    const w = S.stats.warn, avg = w.length ? Math.round(w.reduce((a, b) => a + b, 0) / w.length) : null;
+    const key = [S.stats.stopped, S.stats.falses, avg, S.stats.close].join('|'); if (key === lastStats) return; lastStats = key;
+    el('sStopped').textContent = S.stats.stopped; el('sFalse').textContent = S.stats.falses;
+    el('sWarn').textContent = avg === null ? '–' : avg; el('sClose').textContent = S.stats.close;
+  }
+
+  // ---------- drawing ----------
+  const bg = document.createElement('canvas');
+  let scale = 1, dpr = 1;
+  function resize() {
+    const w = cv.parentElement.clientWidth; dpr = Math.min(window.devicePixelRatio || 1, 2);
+    cv.width = Math.round(w * dpr); cv.height = Math.round(w * H / W * dpr); scale = cv.width / W;
+    bg.width = cv.width; bg.height = cv.height; drawBg();
+  }
+  function drawBg() {
+    const b = bg.getContext('2d'); b.setTransform(scale, 0, 0, scale, 0, 0);
+    b.fillStyle = C.grass; b.fillRect(0, 0, W, H);
+    let seed = 7; const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+    b.fillStyle = C.grass2; for (let i = 0; i < 900; i++) b.fillRect(rnd() * W, rnd() * H, 2, 2);
+    b.strokeStyle = C.trail; b.lineWidth = 12; b.lineCap = 'round'; b.lineJoin = 'round';
+    for (const k in trails) { b.beginPath(); trails[k].forEach((p, i) => i ? b.lineTo(p[0], p[1]) : b.moveTo(p[0], p[1])); b.stroke(); }
+    b.save(); b.setLineDash([14, 10]); b.strokeStyle = C.border; b.lineWidth = 3; roundRect(b, 22, 22, W - 44, H - 44, 30); b.stroke(); b.restore();
+    b.fillStyle = C.water; b.beginPath(); b.ellipse(water.x, water.y, water.rx, water.ry, 0, 0, 7); b.fill();
+    b.fillStyle = C.water2; b.beginPath(); b.ellipse(water.x - 12, water.y - 6, water.rx * 0.62, water.ry * 0.55, 0, 0, 7); b.fill();
+    for (const [x, y] of trees) { b.fillStyle = C.tree; b.beginPath(); b.ellipse(x, y, 30, 12, 0, 0, 7); b.fill(); b.fillStyle = C.tree2; b.beginPath(); b.ellipse(x - 6, y - 5, 17, 7, 0, 0, 7); b.fill(); }
+    // station
+    b.fillStyle = '#C9D3D6'; b.fillRect(station.x - 34, station.y - 18, 68, 36);
+    b.fillStyle = '#4B5E66'; b.beginPath(); b.moveTo(station.x - 42, station.y - 18); b.lineTo(station.x, station.y - 44); b.lineTo(station.x + 42, station.y - 18); b.fill();
+    b.fillStyle = '#5D4037'; b.fillRect(station.x - 8, station.y, 16, 18);
+    b.fillStyle = C.ink; b.font = '600 15px "Barlow Condensed", Arial'; b.textAlign = 'center';
+    b.fillText('RANGER STATION', station.x, station.y + 38);
+    b.fillStyle = C.muted; b.font = '600 13px "Barlow Condensed", Arial';
+    b.fillText('WATER HOLE', water.x, water.y + 5);
+    b.textAlign = 'right'; b.fillText('NORTH GATE', 975, 52); b.textAlign = 'center'; b.textAlign = 'right'; b.fillText('EAST GATE', 960, 470); b.textAlign = 'center'; b.fillText('SOUTH GATE', 650, 662);
+    b.textAlign = 'left'; b.fillText('PARK BOUNDARY', 44, 50);
+  }
+  function roundRect(c, x, y, w, h, r) { c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
+
+  function drawElephant(e) {
+    const s = e.s, f = e.vx < -0.5 ? -1 : 1, lift = Math.sin(e.step * 3) * 1.5;
+    ctx.save(); ctx.translate(e.x, e.y); ctx.scale(f * s, s); ctx.fillStyle = C.ele;
+    ctx.beginPath(); ctx.ellipse(0, 0, 26, 17, 0, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.arc(26, -8, 13, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(35, -2); ctx.quadraticCurveTo(42, 12, 37, 24); ctx.lineTo(32, 23); ctx.quadraticCurveTo(35, 10, 29, 3); ctx.fill();
+    for (const [x, o] of [[-21, lift], [-9, -lift], [7, lift], [17, -lift]]) ctx.fillRect(x, 7 + o * 0.3, 8, 17 - o * 0.3);
+    ctx.fillStyle = C.ele2; ctx.beginPath(); ctx.ellipse(20, -5, 8, 11, 0.2, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#F4EFE6'; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(33, 3); ctx.quadraticCurveTo(38, 8, 43, 6); ctx.stroke();
+    ctx.restore();
+  }
+  function drawPerson(x, y, col, ghost) {
+    ctx.save(); ctx.globalAlpha = ghost ? 0.45 : 1; ctx.fillStyle = col; ctx.strokeStyle = col; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.arc(x, y - 13, 4, 0, 7); ctx.fill(); ctx.fillRect(x - 4, y - 9, 8, 11);
+    ctx.beginPath(); ctx.moveTo(x - 3, y + 2); ctx.lineTo(x - 5, y + 11); ctx.moveTo(x + 3, y + 2); ctx.lineTo(x + 5, y + 11); ctx.stroke();
+    ctx.fillStyle = '#FFF59D'; ctx.globalAlpha *= 0.8; ctx.beginPath(); ctx.arc(x, y - 15, 1.8, 0, 7); ctx.fill(); ctx.restore();
+  }
+  function drawPost(p, now) {
+    const hot = p.alarm > 0;
+    if (rings) { ctx.strokeStyle = 'rgba(63,224,181,0.14)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(p.x, p.y, HEAR, 0, 7); ctx.stroke();
+      ctx.strokeStyle = 'rgba(242,181,68,0.16)'; ctx.setLineDash([4, 5]); ctx.beginPath(); ctx.arc(p.x, p.y, FEEL, 0, 7); ctx.stroke(); ctx.setLineDash([]); }
+    if (hot) { const r = 18 + ((now * 40) % 30); ctx.strokeStyle = 'rgba(255,107,74,' + (1 - (r - 18) / 30) + ')'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, 7); ctx.stroke(); }
+    ctx.fillStyle = '#0E1C21'; ctx.strokeStyle = hot ? C.alert : C.mint; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.arc(p.x, p.y, 13, 0, 7); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = p.heard > 0.05 ? C.mint : '#2A4A50'; ctx.beginPath(); ctx.arc(p.x - 5, p.y - 2, 3.6, 0, 7); ctx.fill();
+    ctx.fillStyle = p.felt > 0.05 ? C.gold : '#4A4330'; ctx.beginPath(); ctx.arc(p.x + 5, p.y + 3, 3.6, 0, 7); ctx.fill();
+    ctx.fillStyle = C.ink; ctx.font = '700 13px "Barlow Condensed", Arial'; ctx.textAlign = 'center'; ctx.fillText(p.id, p.x, p.y + 28);
+  }
+  function drawTruck(t) {
+    ctx.save(); ctx.translate(t.x, t.y); ctx.fillStyle = '#5D4037'; ctx.fillRect(-18, -9, 26, 14); ctx.fillStyle = '#4E342E'; ctx.fillRect(8, -6, 12, 11);
+    ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(-11, 6, 4.5, 0, 7); ctx.arc(12, 6, 4.5, 0, 7); ctx.fill(); ctx.restore();
+  }
+  function drawDrone(dr, now) {
+    if (dr.state === 'scan' || dr.state === 'follow') { ctx.fillStyle = 'rgba(63,224,181,0.10)'; ctx.strokeStyle = 'rgba(63,224,181,0.5)'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(dr.x, dr.y + 10, dr.state === 'scan' ? 120 * Math.min(1, (1.5 - dr.timer) / 0.6 + 0.2) : 60, 0, 7); ctx.fill(); ctx.stroke(); }
+    ctx.save(); ctx.translate(dr.x, dr.y); ctx.strokeStyle = C.ink; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.moveTo(-11, -7); ctx.lineTo(11, 7); ctx.moveTo(-11, 7); ctx.lineTo(11, -7); ctx.stroke();
+    for (const [x, y] of [[-11, -7], [11, 7], [-11, 7], [11, -7]]) { ctx.beginPath(); ctx.ellipse(x, y, 6, 2, dr.rot + x, 0, 7); ctx.stroke(); }
+    ctx.fillStyle = C.mint; ctx.fillRect(-5, -4, 10, 8); ctx.restore();
+  }
+  function drawJeep(j) {
+    ctx.save(); ctx.translate(j.x, j.y); if (j.dir < 0) ctx.scale(-1, 1);
+    ctx.fillStyle = '#2E7D32'; roundRect(ctx, -16, -8, 32, 13, 3); ctx.fill(); ctx.fillStyle = '#43A047'; ctx.fillRect(-6, -15, 15, 8);
+    ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(-9, 6, 4.5, 0, 7); ctx.arc(9, 6, 4.5, 0, 7); ctx.fill();
+    if (j.state === 'chase') { ctx.fillStyle = (Math.floor(S.t * 4) % 2) ? '#E53935' : '#42A5F5'; ctx.fillRect(-2, -19, 5, 4); }
+    ctx.restore();
+  }
+
+  function draw(now) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(bg, 0, 0); ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    // sounds
+    for (const s of S.sounds) {
+      if (s.kind === 'thunder') { ctx.fillStyle = 'rgba(200,220,255,' + (0.10 * (s.until - S.t)) + ')'; ctx.fillRect(0, 0, W, H); continue; }
+      const col = s.human ? '255,138,107' : '143,167,162'; const ph = (now * 1.6) % 1;
+      for (let i = 0; i < 2; i++) { const r = 10 + ((ph + i / 2) % 1) * 36; ctx.strokeStyle = 'rgba(' + col + ',' + (0.6 * (1 - (r - 10) / 36)) + ')'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(s.x, s.y - 6, r, -1.2, 0.2); ctx.stroke(); }
+      if (s.kind === 'monkey' || s.kind === 'branch') { ctx.fillStyle = C.muted; ctx.font = '600 12px "Barlow Condensed", Arial'; ctx.textAlign = 'center'; ctx.fillText(s.kind === 'monkey' ? 'monkeys' : 'branch falls', s.x, s.y - 30); }
+    }
+    // zones
+    for (const z of S.zones) {
+      const pulse = 0.5 + 0.5 * Math.sin(now * 5);
+      const col = z.status === 'clear' ? '143,167,162' : '255,107,74';
+      ctx.fillStyle = 'rgba(' + col + ',' + (z.status === 'possible' ? 0.10 + 0.08 * pulse : 0.12) + ')';
+      ctx.strokeStyle = 'rgba(' + col + ',0.8)'; ctx.lineWidth = 2; ctx.setLineDash(z.status === 'possible' ? [6, 6] : []);
+      ctx.beginPath(); ctx.arc(z.x, z.y, 62, 0, 7); ctx.fill(); ctx.stroke(); ctx.setLineDash([]);
+      ctx.font = '700 14px "Barlow Condensed", Arial'; ctx.textAlign = 'center'; ctx.fillStyle = z.status === 'clear' ? C.muted : C.alert;
+      ctx.fillText(z.status === 'possible' ? 'POSSIBLE POACHERS?' : z.status === 'confirmed' ? 'POACHERS SEEN' : 'CLEAR: FALSE ALARM', z.x, z.y - 68);
+    }
+    // radio routes for live packets
+    for (const k of S.packets) {
+      ctx.strokeStyle = 'rgba(63,224,181,0.35)'; ctx.setLineDash([6, 6]); ctx.lineWidth = 2; ctx.beginPath();
+      k.route.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)); ctx.stroke(); ctx.setLineDash([]);
+      const a = k.route[k.seg], b = k.route[k.seg + 1]; const x = a.x + (b.x - a.x) * k.f, y = a.y + (b.y - a.y) * k.f;
+      ctx.fillStyle = C.mint; ctx.shadowColor = C.mint; ctx.shadowBlur = 12; ctx.beginPath(); ctx.arc(x, y, 5, 0, 7); ctx.fill(); ctx.shadowBlur = 0;
+    }
+    for (const p of POSTS) drawPost(p, now);
+    const sorted = S.herd.slice().sort((a, b) => a.y - b.y); for (const e of sorted) drawElephant(e);
+    for (const g of S.groups) {
+      if (g.truck.on) drawTruck(g.truck);
+      const show = g.spotted || reveal; if (!show) continue;
+      const col = g.spotted ? C.alert : C.poach;
+      drawPerson(g.x - 6, g.y, col, !g.spotted); drawPerson(g.x + 7, g.y + 3, col, !g.spotted);
+      if (g.spotted && g.state === 'walk') { ctx.strokeStyle = C.alert; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(g.x, g.y - 4, 20, 0, 7); ctx.stroke(); }
+      if (!g.spotted && reveal) { ctx.fillStyle = C.muted; ctx.font = '600 11px "Barlow Condensed", Arial'; ctx.textAlign = 'center'; ctx.fillText('hidden', g.x, g.y + 24); }
+    }
+    drawJeep(S.jeep); drawDrone(S.drone, now);
+  }
+
+  // ---------- loop ----------
+  let last = performance.now();
+  function frame(ts) {
+    const real = Math.min(0.1, (ts - last) / 1000); last = ts;
+    if (!paused) { let left = real * speed; while (left > 0) { const dt = Math.min(0.05, left); step(dt); left -= dt; } el('clock').textContent = clock(S.t) + (paused ? '' : ''); }
+    draw(ts / 1000); requestAnimationFrame(frame);
+  }
+
+  // ---------- controls ----------
+  function setMode(m) {
+    mode = m; el('mSimple').classList.toggle('on', m === 'simple'); el('mSmart').classList.toggle('on', m === 'smart');
+    el('modeHint').textContent = m === 'smart' ? 'An alarm needs human voices or an engine AND two-legged footsteps within 2 minutes.' : 'Any sound or any footsteps (even elephants) sets off an alarm. Watch the false alarms climb.';
+    log(m === 'smart' ? 'Posts switched to HerdSense mode (AI + two senses)' : 'Posts switched to Simple mode (one sense)', 'info');
+  }
+  el('mSimple').onclick = () => setMode('simple'); el('mSmart').onclick = () => setMode('smart');
+  el('bPause').onclick = () => { paused = !paused; el('bPause').textContent = paused ? 'Play' : 'Pause'; };
+  const speeds = [1, 2, 4]; el('bSpeed').onclick = () => { speed = speeds[(speeds.indexOf(speed) + 1) % 3]; el('bSpeed').textContent = 'Speed ' + speed + '×'; };
+  el('bReset').onclick = () => { S = fresh(); logEl.innerHTML = ''; lastStats = ''; stats(); log('New night. Nine HerdSense posts are listening.', 'info'); };
+  el('bPoach').onclick = () => { sendPoachers(); };
+  el('bMonkey').onclick = () => noise('monkey'); el('bBranch').onclick = () => noise('branch'); el('bThunder').onclick = () => noise('thunder');
+  el('reveal').onchange = e => reveal = e.target.checked; el('rings').onchange = e => rings = e.target.checked;
+  window.addEventListener('resize', resize);
+  if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) { paused = true; el('bPause').textContent = 'Play'; }
+
+  S = fresh(); resize();
+  log('New night. Nine HerdSense posts are listening.', 'info');
+  sendPoachers(); S.groups[0].x += 0; // start with one group already entering, so the first view shows the system working
+  for (let i = 0; i < 300; i++) step(0.05); // advance 15 minutes so the map opens mid-scenario
+  document.fonts && document.fonts.ready.then(() => drawBg());
+  requestAnimationFrame(frame);
+})();
+</script>
+</body></html>
